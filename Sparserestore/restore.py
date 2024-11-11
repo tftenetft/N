@@ -11,6 +11,7 @@ class FileToRestore:
         self.group = group
         
 def convert_to_domain(path: str) -> str:
+    print(f"convert_to_domain called with path: {path}")
     # if it doesn't start with a / then it is already a domain
     if not path.startswith("/"):
         return path
@@ -28,12 +29,16 @@ def convert_to_domain(path: str) -> str:
 
     for root_path, domain in mappings.items():
         if path.startswith(root_path):
-            return path.replace(root_path, domain)
+            converted_path = path.replace(root_path, domain)
+            print(f"convert_to_domain output: {converted_path}")
+            return converted_path
 
     # no changes, return original path
-    return ""
+    print(f"convert_to_domain output: {path}")
+    return path
 
 def concat_exploit_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str) -> str:
+    print(f"concat_exploit_file called with file: {file}, last_domain: {last_domain}")
     base_path = "/var/backup"
     # set it to work in the separate volumes (prevents a bootloop)
     if file.restore_path.startswith("/var/mobile/"):
@@ -64,9 +69,11 @@ def concat_exploit_file(file: FileToRestore, files_list: list[FileToRestore], la
         group=file.group,
         contents=file.contents
     ))
+    print(f"concat_exploit_file output: new_last_domain: {new_last_domain}")
     return new_last_domain
 
 def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str, last_path: str, flag:  bool == False):
+    print(f"concat_regular_file called with file: {file}, last_domain: {last_domain}, last_path: {last_path}, flag: {flag}")
     path, name = os.path.split(file.restore_path)
     paths = path.split("/")
     new_last_domain = last_domain
@@ -99,10 +106,17 @@ def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], la
         else:
             files_list.append(backup.ConcreteFile(f"{full_path}/{name}", file.domain, owner=file.owner, group=file.group, contents=file.contents))
 
+    print(f"concat_regular_file output: new_last_domain: {new_last_domain}, full_path: {full_path}")
     return new_last_domain, full_path
+
+def debug_restore_files(files: list):
+    print("Debugging restore_files function:")
+    for file in files:
+        print(f"FileToRestore: restore_path={file.restore_path}, domain={file.domain}, owner={file.owner}, group={file.group}")
 
 # files is a list of FileToRestore objects
 def restore_files(files: list, reboot: bool = False, lockdown_client: LockdownClient = None):
+    debug_restore_files(files)
     # create the files to be backed up
     files_list = [
     ]

@@ -24,9 +24,12 @@ def perform_restore(backup: backup.Backup, reboot: bool = False, lockdown_client
             if lockdown_client == None:
                 lockdown_client = create_using_usbmux()
             with Mobilebackup2Service(lockdown_client) as mb:
-                mb.restore(backup_dir, system=True, reboot=False, copy=False, source=".")
+                result = mb.restore(backup_dir, system=True, reboot=False, copy=False, source=".")
+                print(f"mb.restore result: {result}")
             # reboot the device
             reboot_device(reboot, lockdown_client)
+            print("Backup process completed successfully.")
+            return result
     except PyMobileDevice3Exception as e:
         if "Find My" in str(e):
             print("Find My must be disabled in order to use this tool.")
@@ -36,3 +39,4 @@ def perform_restore(backup: backup.Backup, reboot: bool = False, lockdown_client
             raise e
         else:
             reboot_device(reboot, lockdown_client)
+            print("Backup process completed with a crash on purpose.")
