@@ -3,12 +3,35 @@ from pymobiledevice3.lockdown import LockdownClient
 import os
 
 class FileToRestore:
-    def __init__(self, contents: str, restore_path: str, domain: str = None, owner: int = 501, group: int = 501):
+    def __init__(self, restore_path: str, contents: str = None, domain: str = None, owner: int = 501, group: int = 501):
         self.contents = contents
         self.restore_path = restore_path
         self.domain = domain
         self.owner = owner
         self.group = group
+        
+def convert_to_domain(path: str) -> str:
+    # if it doesn't start with a / then it is already a domain
+    if not path.startswith("/"):
+        return path
+
+    mappings = {
+        "/var/Managed Preferences": "ManagedPreferencesDomain",
+        "/var/root": "RootDomain",
+        "/var/preferences": "SystemPreferencesDomain",
+        "/var/MobileDevice": "MobileDeviceDomain",
+        "/var/mobile": "HomeDomain",
+        "/var/db": "DatabaseDomain",
+        "/var/containers/Shared/SystemGroup": "SysSharedContainerDomain-.",
+        "/var/containers/Data/SystemGroup": "SysContainerDomain-."
+    }
+
+    for root_path, domain in mappings.items():
+        if path.startswith(root_path):
+            return path.replace(root_path, domain)
+
+    # no changes, return original path
+    return ""
 
 def concat_exploit_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str) -> str:
     base_path = "/var/backup"
@@ -32,6 +55,8 @@ def concat_exploit_file(file: FileToRestore, files_list: list[FileToRestore], la
             group=file.group
         ))
         new_last_domain = domain_path
+
+    
     files_list.append(backup.ConcreteFile(
         "",
         f"{domain_path}/{name}",
@@ -41,7 +66,7 @@ def concat_exploit_file(file: FileToRestore, files_list: list[FileToRestore], la
     ))
     return new_last_domain
 
-def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str, last_path: str):
+def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str, last_path: str, flag:  bool == False):
     path, name = os.path.split(file.restore_path)
     paths = path.split("/")
     new_last_domain = last_domain
@@ -68,14 +93,12 @@ def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], la
                 group=file.group
             ))
             last_path = full_path
-    # finally, append the file
-    files_list.append(backup.ConcreteFile(
-        f"{full_path}/{name}",
-        file.domain,
-        owner=file.owner,
-        group=file.group,
-        contents=file.contents
-    ))
+        
+        if (flag == True):
+            files_list.append(backup.SymbolicLink(path = f"{full_path}/{name}", domain = file.domain, target = "/System/Library/FeatureFlags/Global.plist", owner = 501, group = 501))
+        else:
+            files_list.append(backup.ConcreteFile(f"{full_path}/{name}", file.domain, owner=file.owner, group=file.group, contents=file.contents))
+
     return new_last_domain, full_path
 
 # files is a list of FileToRestore objects
@@ -88,11 +111,19 @@ def restore_files(files: list, reboot: bool = False, lockdown_client: LockdownCl
     last_domain = ""
     last_path = ""
     exploit_only = True
+    path = convert_to_domain(path = "/var/mobile/Library/Logs/RTCReporting/test.txt")
+    
+    path_items = path.split("/")
+
+    domain = path_items[0] if path_items else ""
+    
+    last_domain, last_path = concat_regular_file(files_list = files_list, file = FileToRestore(restore_path = path,domain = domain), last_path = last_path, last_domain = last_domain, flag = True)
+            
     for file in sorted_files:
         if file.domain == None:
             last_domain = concat_exploit_file(file, files_list, last_domain)
         else:
-            last_domain, last_path = concat_regular_file(file, files_list, last_domain, last_path)
+            last_domain, last_path = concat_regular_file(file, files_list, last_domain, last_path, flag = False)
             exploit_only = False
 
     # crash the restore to skip the setup (only works for exploit files)
